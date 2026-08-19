@@ -1,5 +1,8 @@
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
+from app.api.dependencies import get_current_user
 
 from app.core.database import get_db
 from app.core.security import (
@@ -7,7 +10,10 @@ from app.core.security import (
     verify_password,
     create_access_token
 )
+
 from app.models.user import User
+from app.models.role import Role
+
 from app.schemas.user import (
     UserCreate,
     UserResponse,
@@ -22,9 +28,9 @@ router = APIRouter(
 )
 
 
-# =========================
+# =========================================================
 # REGISTER
-# =========================
+# =========================================================
 
 @router.post(
     "/register",
@@ -35,6 +41,7 @@ def register_user(
     user_data: UserCreate,
     db: Session = Depends(get_db)
 ):
+
     # Check email
     existing_email = (
         db.query(User)
@@ -61,14 +68,30 @@ def register_user(
             detail="Username already registered"
         )
 
+    # Get default employee role
+    employee_role = (
+        db.query(Role)
+        .filter(Role.name == "employee")
+        .first()
+    )
+
+    if not employee_role:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Default employee role not found"
+        )
+
     # Hash password
-    hashed_password = hash_password(user_data.password)
+    hashed_password = hash_password(
+        user_data.password
+    )
 
     # Create user
     new_user = User(
         username=user_data.username,
         email=user_data.email,
         password_hash=hashed_password,
+        role_id=employee_role.id
     )
 
     db.add(new_user)
@@ -78,9 +101,9 @@ def register_user(
     return new_user
 
 
-# =========================
+# =========================================================
 # LOGIN
-# =========================
+# =========================================================
 
 @router.post(
     "/login",
@@ -90,14 +113,14 @@ def login_user(
     user_data: UserLogin,
     db: Session = Depends(get_db)
 ):
-    # Find user by email
+
+    # Find user
     user = (
         db.query(User)
         .filter(User.email == user_data.email)
         .first()
     )
 
-    # User not found
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -121,11 +144,18 @@ def login_user(
             detail="User account is inactive"
         )
 
-    # Create JWT token
+    # Check role
+    if not user.role:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="User has no role assigned"
+        )
+
+    # Create JWT
     access_token = create_access_token(
         {
             "user_id": user.id,
-            "role": user.role
+            "role_id": user.role_id
         }
     )
 
@@ -133,3 +163,18 @@ def login_user(
         "access_token": access_token,
         "token_type": "bearer"
     }
+
+
+# =========================================================
+# GET CURRENT USER
+# =========================================================
+
+@router.get(
+    "/me",
+    response_model=UserResponse
+)
+def get_me(
+    current_user: User = Depends(get_current_user)
+):
+    return current_user
+

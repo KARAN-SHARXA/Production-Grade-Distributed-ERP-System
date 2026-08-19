@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import Boolean, DateTime, ForeignKey, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
 
@@ -9,7 +9,10 @@ from app.core.database import Base
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[int] = mapped_column(primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(
+        primary_key=True,
+        index=True
+    )
 
     email: Mapped[str] = mapped_column(
         String(255),
@@ -30,9 +33,8 @@ class User(Base):
         nullable=False
     )
 
-    role: Mapped[str] = mapped_column(
-        String(50),
-        default="employee",
+    role_id: Mapped[int] = mapped_column(
+        ForeignKey("roles.id"),
         nullable=False
     )
 
@@ -53,4 +55,9 @@ class User(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow,
         nullable=False
+    )
+
+    role = relationship(
+        "Role",
+        back_populates="users"
     )
