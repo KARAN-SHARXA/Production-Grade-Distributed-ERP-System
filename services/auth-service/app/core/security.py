@@ -2,9 +2,12 @@ from datetime import datetime, timedelta, timezone
 
 import jwt
 from pydantic_settings import BaseSettings
-
 from pwdlib import PasswordHash
 
+
+# =========================
+# Password Hashing
+# =========================
 
 password_hash = PasswordHash.recommended()
 
@@ -16,17 +19,27 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed_password: str) -> bool:
     return password_hash.verify(password, hashed_password)
 
+
+# =========================
+# JWT Settings
+# =========================
+
 class JWTSettings(BaseSettings):
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200
 
     class Config:
         env_file = ".env"
         extra = "ignore"
 
+
 jwt_settings = JWTSettings()
 
+
+# =========================
+# Create Access Token
+# =========================
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
@@ -35,7 +48,9 @@ def create_access_token(data: dict) -> str:
         minutes=jwt_settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
 
-    to_encode.update({"exp": expire})
+    to_encode.update({
+        "exp": expire
+    })
 
     return jwt.encode(
         to_encode,
@@ -43,6 +58,10 @@ def create_access_token(data: dict) -> str:
         algorithm=jwt_settings.JWT_ALGORITHM,
     )
 
+
+# =========================
+# Decode Access Token
+# =========================
 
 def decode_access_token(token: str) -> dict:
     return jwt.decode(
