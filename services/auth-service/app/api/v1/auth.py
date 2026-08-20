@@ -1,14 +1,12 @@
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_current_user
-
 from app.core.database import get_db
 from app.core.security import (
     hash_password,
     verify_password,
-    create_access_token
+    create_access_token,
 )
 
 from app.models.user import User
@@ -18,13 +16,13 @@ from app.schemas.user import (
     UserCreate,
     UserResponse,
     UserLogin,
-    TokenResponse
+    TokenResponse,
 )
 
 
 router = APIRouter(
     prefix="/auth",
-    tags=["Authentication"]
+    tags=["Authentication"],
 )
 
 
@@ -35,13 +33,12 @@ router = APIRouter(
 @router.post(
     "/register",
     response_model=UserResponse,
-    status_code=status.HTTP_201_CREATED
+    status_code=status.HTTP_201_CREATED,
 )
 def register_user(
     user_data: UserCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-
     # Check email
     existing_email = (
         db.query(User)
@@ -52,7 +49,7 @@ def register_user(
     if existing_email:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Email already registered"
+            detail="Email already registered",
         )
 
     # Check username
@@ -65,7 +62,7 @@ def register_user(
     if existing_username:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Username already registered"
+            detail="Username already registered",
         )
 
     # Get default employee role
@@ -78,7 +75,7 @@ def register_user(
     if not employee_role:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Default employee role not found"
+            detail="Default employee role not found",
         )
 
     # Hash password
@@ -91,7 +88,7 @@ def register_user(
         username=user_data.username,
         email=user_data.email,
         password_hash=hashed_password,
-        role_id=employee_role.id
+        role_id=employee_role.id,
     )
 
     db.add(new_user)
@@ -107,13 +104,12 @@ def register_user(
 
 @router.post(
     "/login",
-    response_model=TokenResponse
+    response_model=TokenResponse,
 )
 def login_user(
     user_data: UserLogin,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
-
     # Find user
     user = (
         db.query(User)
@@ -124,44 +120,62 @@ def login_user(
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            detail="Invalid email or password",
         )
 
     # Verify password
     if not verify_password(
         user_data.password,
-        user.password_hash
+        user.password_hash,
     ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password"
+            detail="Invalid email or password",
         )
 
     # Check active account
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User account is inactive"
+            detail="User account is inactive",
         )
 
     # Check role
     if not user.role:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="User has no role assigned"
+            detail="User has no role assigned",
         )
 
-    # Create JWT
+    # =====================================================
+    # GET ROLE PERMISSIONS
+    # =====================================================
+
+    permissions = []
+
+    if user.role.permissions:
+        permissions = [
+            permission.name
+            for permission in user.role.permissions
+        ]
+
+    # =====================================================
+    # CREATE JWT
+    # =====================================================
+
     access_token = create_access_token(
         {
+            "sub": str(user.id),
             "user_id": user.id,
-            "role_id": user.role_id
+            "role_id": user.role_id,
+            "role": user.role.name,
+            "permissions": permissions,
         }
     )
 
     return {
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
     }
 
 
@@ -171,10 +185,9 @@ def login_user(
 
 @router.get(
     "/me",
-    response_model=UserResponse
+    response_model=UserResponse,
 )
 def get_me(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ):
     return current_user
-
